@@ -8,8 +8,10 @@
 #include "types.h"
 
 extern SLONG options;
-#define OPT_SMALL	0x01
+#define OPT_SMALL		0x01
 #define OPT_SMART_C_LINK	0x02
+#define OPT_OVERLAY		0x04
+#define OPT_CONTWRAM		0x08
 
 enum eRpnData {
 	RPN_ADD = 0,
@@ -57,14 +59,17 @@ enum eSectionType {
 	SECT_ROM0,
 	SECT_HRAM,
 	SECT_WRAMX,
-	SECT_SRAM
+	SECT_SRAM,
+	SECT_OAM
 };
 
 struct sSection {
 	SLONG nBank;
 	SLONG nOrg;
+	SLONG nAlign;
 	BBOOL oAssigned;
 
+	char *pzName;
 	SLONG nByteSize;
 	enum eSectionType Type;
 	UBYTE *pData;

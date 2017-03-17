@@ -259,7 +259,7 @@ static void
 usage(void)
 {
 	printf(
-"Usage: rgbasm [-hv] [-b chars] [-Dname[=value]] [-g chars] [-i path]\n"
+"Usage: rgbasm [-hvE] [-b chars] [-Dname[=value]] [-g chars] [-i path]\n"
 "              [-M dependfile] [-o outfile] [-p pad_value] file.asm\n");
 	exit(1);
 }
@@ -300,12 +300,13 @@ main(int argc, char *argv[])
 	DefaultOptions.fillchar = 0;
 	DefaultOptions.verbose = false;
 	DefaultOptions.haltnop = true;
+	DefaultOptions.exportall = false;
 
 	opt_SetCurrentOptions(&DefaultOptions);
 
 	newopt = CurrentOptions;
 
-	while ((ch = getopt(argc, argv, "b:D:g:hi:M:o:p:v")) != -1) {
+	while ((ch = getopt(argc, argv, "b:D:g:hi:M:o:p:vE")) != -1) {
 		switch (ch) {
 		case 'b':
 			if (strlen(optarg) == 2) {
@@ -357,6 +358,9 @@ main(int argc, char *argv[])
 		case 'v':
 			newopt.verbose = true;
 			break;
+		case 'E':
+			newopt.exportall = true;
+			break;
 		default:
 			usage();
 		}
@@ -392,6 +396,7 @@ main(int argc, char *argv[])
 	nPass = 1;
 	nErrors = 0;
 	sym_PrepPass1();
+	sym_SetExportAll(CurrentOptions.exportall);
 	fstk_Init(tzMainfile);
 	opt_ParseDefines();
 
