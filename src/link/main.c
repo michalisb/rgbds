@@ -35,8 +35,8 @@ static void
 usage(void)
 {
 	printf(
-"usage: rgblink [-t] [-m mapfile] [-n symfile] [-o outfile] [-p pad_value]\n"
-"               [-s symbol] file [...]\n");
+"usage: rgblink [-tw] [-m mapfile] [-n symfile] [-O overlay] [-o outfile] \n"
+"               [-p pad_value] [-s symbol] file [...]\n");
 	exit(1);
 }
 
@@ -56,7 +56,7 @@ main(int argc, char *argv[])
 
 	progname = argv[0];
 
-	while ((ch = getopt(argc, argv, "m:n:o:p:s:t")) != -1) {
+	while ((ch = getopt(argc, argv, "m:n:o:O:p:s:tw")) != -1) {
 		switch (ch) {
 		case 'm':
 			SetMapfileName(optarg);
@@ -66,6 +66,10 @@ main(int argc, char *argv[])
 			break;
 		case 'o':
 			out_Setname(optarg);
+			break;
+		case 'O':
+			out_SetOverlayname(optarg);
+			options |= OPT_OVERLAY;
 			break;
 		case 'p':
 			fillchar = strtoul(optarg, &ep, 0);
@@ -83,6 +87,12 @@ main(int argc, char *argv[])
 			break;
 		case 't':
 			options |= OPT_SMALL;
+			break;
+		case 'w':
+			/* Set to set WRAM as a single continuous block as on DMG.
+			All WRAM sections must be WRAM0 as bankable WRAM sections do
+			not exist in this mode. A WRAMX section will raise an error. */
+			options |= OPT_CONTWRAM;
 			break;
 		default:
 			usage();

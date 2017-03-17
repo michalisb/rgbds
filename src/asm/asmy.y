@@ -24,7 +24,7 @@ void
 bankrangecheck(char *name, ULONG secttype, SLONG org, SLONG bank)
 {
 	SLONG minbank, maxbank;
-	char *stype;
+	char *stype = NULL;
 	switch (secttype) {
 	case SECT_ROMX:
 		stype = "ROMX";
@@ -51,7 +51,7 @@ bankrangecheck(char *name, ULONG secttype, SLONG org, SLONG bank)
 		    "ROMX, WRAMX, SRAM, or VRAM sections");
 	}
 
-	if (bank < minbank || bank > maxbank) {
+	if (stype && (bank < minbank || bank > maxbank)) {
 		yyerror("%s bank value $%x out of range ($%x to $%x)",
 		    stype, bank, minbank, maxbank);
 	}
@@ -142,8 +142,9 @@ void	copyrept( void )
 {
 	SLONG	level=1, len, instring=0;
 	char	*src=pCurrentBuffer->pBuffer;
+	char	*bufferEnd = pCurrentBuffer->pBufferStart + pCurrentBuffer->nBufferSize;
 
-	while( *src && level )
+	while( src < bufferEnd && level )
 	{
 		if( instring==0 )
 		{
@@ -182,6 +183,10 @@ void	copyrept( void )
 		}
 	}
 
+	if (level != 0) {
+		fatalerror("Unterminated REPT block");
+	}
+
 	len=src-pCurrentBuffer->pBuffer-4;
 
 	src=pCurrentBuffer->pBuffer;
@@ -217,8 +222,9 @@ void	copymacro( void )
 {
 	SLONG	level=1, len, instring=0;
 	char	*src=pCurrentBuffer->pBuffer;
+	char	*bufferEnd = pCurrentBuffer->pBufferStart + pCurrentBuffer->nBufferSize;
 
-	while( *src && level )
+	while( src < bufferEnd && level )
 	{
 		if( instring==0 )
 		{
@@ -255,6 +261,10 @@ void	copymacro( void )
 				src+=1;
 			}
 		}
+	}
+
+	if (level != 0) {
+		fatalerror("Unterminated MACRO definition");
 	}
 
 	len=src-pCurrentBuffer->pBuffer-4;
@@ -348,6 +358,10 @@ void	if_skip_to_else( void )
 		}
 	}
 
+	if (level != 0) {
+		fatalerror("Unterminated IF construct");
+	}
+
 	len=src-pCurrentBuffer->pBuffer;
 
 	yyskipbytes( len );
@@ -403,6 +417,10 @@ void	if_skip_to_endc( void )
 		}
 	}
 
+	if (level != 0) {
+		fatalerror("Unterminated IF construct");
+	}
+
 	len=src-pCurrentBuffer->pBuffer;
 
 	yyskipbytes( len );
@@ -442,7 +460,7 @@ void	if_skip_to_endc( void )
 %left	T_OP_MUL T_OP_DIV T_OP_MOD
 %left	T_OP_NOT
 %left	T_OP_DEF
-%left	T_OP_BANK
+%left	T_OP_BANK T_OP_ALIGN
 %left	T_OP_SIN
 %left	T_OP_COS
 %left	T_OP_TAN
@@ -495,7 +513,7 @@ void	if_skip_to_endc( void )
 %token	T_POP_POPO
 %token	T_POP_PUSHO
 %token	T_POP_OPT
-%token	T_SECT_WRAM0 T_SECT_VRAM T_SECT_ROMX T_SECT_ROM0 T_SECT_HRAM T_SECT_WRAMX T_SECT_SRAM
+%token	T_SECT_WRAM0 T_SECT_VRAM T_SECT_ROMX T_SECT_ROM0 T_SECT_HRAM T_SECT_WRAMX T_SECT_SRAM T_SECT_OAM
 
 %token	T_Z80_ADC T_Z80_ADD T_Z80_AND
 %token	T_Z80_BIT
@@ -1079,9 +1097,9 @@ string			:	T_STRING
 				|	T_OP_STRCAT '(' string ',' string ')'
 					{ strcpy($$,$3); strcat($$,$5); }
 				|	T_OP_STRUPR '(' string ')'
-					{ strcpy($$,$3); strupr($$); }
+					{ strcpy($$,$3); upperstring($$); }
 				|	T_OP_STRLWR '(' string ')'
-					{ strcpy($$,$3); strlwr($$); }
+					{ strcpy($$,$3); lowerstring($$); }
 ;
 section:
 		T_POP_SECTION string ',' sectiontype
@@ -1095,6 +1113,10 @@ section:
 			else
 				yyerror("Address $%x not 16-bit", $6);
 		}
+	|	T_POP_SECTION string ',' sectiontype ',' T_OP_ALIGN '[' const ']'
+		{
+			out_NewAlignedSection($2, $4, $8, -1);
+		}
 	|	T_POP_SECTION string ',' sectiontype ',' T_OP_BANK '[' const ']'
 		{
 			bankrangecheck($2, $4, -1, $8);
@@ -1106,6 +1128,14 @@ section:
 			}
 			bankrangecheck($2, $4, $6, $11);
 		}
+	|	T_POP_SECTION string ',' sectiontype ',' T_OP_ALIGN '[' const ']' ',' T_OP_BANK '[' const ']'
+		{
+			out_NewAlignedSection($2, $4, $8, $13);
+		}
+	|	T_POP_SECTION string ',' sectiontype ',' T_OP_BANK '[' const ']' ',' T_OP_ALIGN '[' const ']'
+		{
+			out_NewAlignedSection($2, $4, $13, $8);
+		}
 ;
 
 sectiontype:
@@ -1116,6 +1146,7 @@ sectiontype:
 	|	T_SECT_HRAM	{ $$=SECT_HRAM; }
 	|	T_SECT_WRAMX	{ $$=SECT_WRAMX; }
 	|	T_SECT_SRAM	{ $$=SECT_SRAM; }
+	|	T_SECT_OAM	{ $$=SECT_OAM; }
 ;
 
 
@@ -1263,11 +1294,15 @@ z80_ldi			:	T_Z80_LDI T_MODE_HL_IND comma T_MODE_A
 					{ out_AbsByte(0x02|(2<<4)); }
 				|	T_Z80_LDI T_MODE_A comma T_MODE_HL
 					{ out_AbsByte(0x0A|(2<<4)); }
+				|	T_Z80_LDI T_MODE_A comma T_MODE_HL_IND
+					{ out_AbsByte(0x0A|(2<<4)); }
 ;
 
 z80_ldd			:	T_Z80_LDD T_MODE_HL_IND comma T_MODE_A
 					{ out_AbsByte(0x02|(3<<4)); }
 				|	T_Z80_LDD T_MODE_A comma T_MODE_HL
+					{ out_AbsByte(0x0A|(3<<4)); }
+				|	T_Z80_LDD T_MODE_A comma T_MODE_HL_IND
 					{ out_AbsByte(0x0A|(3<<4)); }
 ;
 
